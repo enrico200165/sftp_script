@@ -35,6 +35,28 @@ def tstamp(format = "%Y%m%d", prefix = "", suffix = '_'):
     return ret
 
 
+def get_connection(host, user, password, sftp_log_file, port, dest_dir, cnopts):
+    conn = None
+    try:
+        conn = sftp.Connection(host=host, username=user, password=password, log=sftp_log_file,
+            port = port, cnopts=cnopts)
+        log.info(f"connesso a {host}:{port}")
+        try:
+            log.info(f"cd a directory remota: {dest_dir}")
+            conn.cwd(dest_dir)
+            log.info(f"directory remota: {conn.getcwd()}")
+        except Exception as e:
+            log.error(e)
+            log.error(f"unable to change to remote directory: {dest_dir}")
+            return None
+    except Exception as e:
+        log.error(e)
+        log.error(f"exiting, unable to open connection to: {host}:{port}")
+        return None
+    
+    return conn
+
+
 def upload_file(conn, source_dir, dest_dir, fname, verbose = True):
     global log
     REG_TSTAMP = "^[0-9]{8}_"
@@ -55,48 +77,41 @@ def upload_file(conn, source_dir, dest_dir, fname, verbose = True):
         return None
 
 
+
 def upload_files(source_dir, dest_dir, dir_inviati, sftp_log_file = False):
 
-    try:
-        # evita un bug interno
-        cnopts = sftp.CnOpts()
-        cnopts.hostkeys = None
-        with sftp.Connection(host=host, username=user, password=password, log=sftp_log_file, 
-        port = port, cnopts=cnopts) as sftp_conn:
-            try:
-                log.info(f"cd a directory remota: {dest_dir}")
-                sftp_conn.cwd(dest_dir)
-                log.info(f"directory remota: {sftp_conn.getcwd()}")
-            except Exception as e:
-                log.error(e)
-                log.error(f"exiting, unable to change to remote directory: {dest_dir}")
-                sys.exit(1)
+    fname = ""
+    cnopts = sftp.CnOpts()
+    cnopts.hostkeys = None
 
-            fname = ""
-            try:
-                # get local files list
-                fnames_list = [f for f in os.listdir(source_dir) if os.path.isfile(os.path.join(source_dir, f))]
-                log.info(f'trovati {len(fnames_list)} files da inviare in {source_dir}')
-                conteggio, errori  = 0, 0
-                for fname in fnames_list:
-                    conteggio += 1
-                    pathname_file_uploaded = upload_file(sftp_conn, source_dir, dest_dir, fname)
-                    if pathname_file_uploaded is not None:
-                        fpathname_dir_inviati = os.path.join(dir_inviati, tstamp()+fname)
-                        log.info(f"sposto\n{pathname_file_uploaded} a\n{fpathname_dir_inviati}")
-                        shutil.move(pathname_file_uploaded, fpathname_dir_inviati)
-                    else:
-                        errori += 1
-                log.info("#"*5+f" uploads: {conteggio} di cui falliti: {errori} "+"#"*5)
-            except Exception as e:
-                log.error(e)
-                log.error(f"exiting, unable to upload: {fname}")
-                sys.exit(1)
 
-    except Exception as e:
-        log.error(e)
-        log.error(f"exiting, unable to open connection to: {host}:{port}")
-        sys.exit(1)
+    # get local files list
+    fnames_list = [f for f in os.listdir(source_dir) if os.path.isfile(os.path.join(source_dir, f))]
+    log.info(f'trovati {len(fnames_list)} files da inviare in {source_dir}')
+
+    conteggio, errori  = 0, 0
+    for fname in fnames_list:
+        conteggio += 1
+        with get_connection(host, user = user, password = password, sftp_log_file = sftp_log_file,     
+            port = port, dest_dir = dest_dir, cnopts=cnopts) as sftp_conn:
+            if sftp_conn is None:
+                log.error(f"non disponibile connessione per upload del file: {fname}")
+                continue
+            pathname_file_uploaded = upload_file(sftp_conn, source_dir, dest_dir, fname)
+            if pathname_file_uploaded is not None:
+                fpathname_dir_inviati = os.path.join(dir_inviati, tstamp()+fname)
+                log.info(f"sposto\n{pathname_file_uploaded} a\n{fpathname_dir_inviati}")
+                shutil.move(pathname_file_uploaded, fpathname_dir_inviati)
+            else:
+                errori += 1
+        log.info("aspetto qualche secondo ...")
+        time.sleep(3)
+
+    log.info("#"*5+f" uploads: {conteggio} di cui falliti: {errori} "+"#"*5)
+    # except Exception as e:
+    #     log.error(e)
+    #     log.error(f"exiting, unable to upload: {fname}")
+
 
 
 
