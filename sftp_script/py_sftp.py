@@ -58,6 +58,9 @@ def upload_file(conn, source_dir, dest_dir, fname, verbose = True):
 def upload_files(source_dir, dest_dir, dir_inviati, sftp_log_file = False):
 
     try:
+        # evita un bug interno
+        cnopts = sftp.CnOpts()
+        cnopts.hostkeys = None
         with sftp.Connection(host=host, username=user, password=password, log=sftp_log_file, 
         port = port, cnopts=cnopts) as sftp_conn:
             try:
@@ -125,10 +128,6 @@ log.info(f'local_source_dir: {local_source_dir}')
 inviati_subdir = config.get('localhost', 'inviati_subdir').strip()
 log.info(f'SUBdirectory per file inviati: {inviati_subdir}')
 
-
-# evita un bug interno
-cnopts = sftp.CnOpts()
-cnopts.hostkeys = None
 
 if not os.path.isdir(local_source_dir):
     log.error(f'non trovata directory sorgente: {local_source_dir}')
